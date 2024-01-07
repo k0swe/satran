@@ -393,6 +393,7 @@ String getWifiCredential(String value) { /* Fetch wifi login details stored in m
       return "n/a";
     }
   }
+  return "n/a";
 }
 
 
