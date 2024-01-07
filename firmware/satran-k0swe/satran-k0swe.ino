@@ -6,12 +6,13 @@
 #include <FS.h>
 #include <LittleFS.h>
 #include <AsyncFsWebServer.h>  // https://github.com/cotestatnt/async-esp-fs-webserver
+#include <SerialLog.h>
 
 #include "index_htm.h"
 
 #define FILESYSTEM LittleFS
 
-char const* hostname = "fsbrowser";
+char const* hostname = "satran";
 AsyncFsWebServer server(80, FILESYSTEM, hostname);
 
 #ifndef LED_BUILTIN
@@ -27,8 +28,7 @@ void wsLogPrintf(bool toSerial, const char* format, ...) {
   vsnprintf(buffer, 128, format, args);
   va_end(args);
   server.wsBroadcast(buffer);
-  if (toSerial)
-    Serial.println(buffer);
+  log_debug(buffer);
 }
 
 // In this example a custom websocket event handler is used instead default
@@ -36,21 +36,21 @@ void onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventTyp
   switch (type) {
     case WS_EVT_CONNECT:
       client->printf("{\"Websocket connected\": true, \"clients\": %u}", client->id());
-      Serial.printf("Websocket client %u connected\n", client->id());
+      log_info("Websocket client %u connected", client->id());
       break;
 
     case WS_EVT_DISCONNECT:
-      Serial.printf("Websocket client %u connected\n", client->id());
+      log_info("Websocket client %u disconnected", client->id());
       break;
 
     case WS_EVT_DATA:
       {
         AwsFrameInfo* info = (AwsFrameInfo*)arg;
         if (info->opcode == WS_TEXT) {
-          char msg[len+1];
+          char msg[len + 1];
           msg[len] = '\0';
           memcpy(msg, data, len);
-          Serial.printf("Received message \"%s\"\n", msg);
+          log_info("Received message \"%s\"", msg);
         }
       }
       break;
@@ -73,43 +73,43 @@ struct tm Time;
 ////////////////////////////////  NTP Time  /////////////////////////////////////
 void getUpdatedtime(const uint32_t timeout) {
   uint32_t start = millis();
-  Serial.print("Sync time...");
+  log_info("Sync time...");
   while (millis() - start < timeout && Time.tm_year <= (1970 - 1900)) {
     time_t now = time(nullptr);
     Time = *localtime(&now);
     delay(5);
   }
-  Serial.println(" done.");
+  log_info(" done.");
 }
 
 
 ////////////////////////////////  Filesystem  /////////////////////////////////////////
-void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
-    Serial.printf("\nListing directory: %s\n", dirname);
-    File root = fs.open(dirname, "r");
-    if(!root){
-        Serial.println("- failed to open directory");
-        return;
+void listDir(fs::FS& fs, const char* dirname, uint8_t levels) {
+  log_info("Listing directory: %s", dirname);
+  File root = fs.open(dirname, "r");
+  if (!root) {
+    log_info("- failed to open directory");
+    return;
+  }
+  if (!root.isDirectory()) {
+    log_info(" - not a directory");
+    return;
+  }
+  File file = root.openNextFile();
+  while (file) {
+    if (file.isDirectory()) {
+      if (levels) {
+#ifdef ESP32
+        listDir(fs, file.path(), levels - 1);
+#elif defined(ESP8266)
+        listDir(fs, file.fullName(), levels - 1);
+#endif
+      }
+    } else {
+      log_info("|__ FILE: %s (%d bytes)", file.name(), file.size());
     }
-    if(!root.isDirectory()){
-        Serial.println(" - not a directory");
-        return;
-    }
-    File file = root.openNextFile();
-    while(file){
-        if(file.isDirectory()){
-            if(levels){
-            #ifdef ESP32
-			  listDir(fs, file.path(), levels - 1);
-			#elif defined(ESP8266)
-			  listDir(fs, file.fullName(), levels - 1);
-			#endif
-            }
-        } else {
-            Serial.printf("|__ FILE: %s (%d bytes)\n",file.name(), file.size());
-        }
-        file = root.openNextFile();
-    }
+    file = root.openNextFile();
+  }
 }
 
 bool startFilesystem() {
@@ -117,7 +117,7 @@ bool startFilesystem() {
     listDir(LittleFS, "/", 1);
     return true;
   } else {
-    Serial.println("ERROR on mounting filesystem. It will be formmatted!");
+    log_info("ERROR on mounting filesystem. It will be formmatted!");
     FILESYSTEM.format();
     ESP.restart();
   }
@@ -150,8 +150,7 @@ bool loadApplicationConfig() {
       ledPin = doc["LED Pin"];
       return true;
     } else {
-      Serial.print(F("Failed to deserialize JSON. Error: "));
-      Serial.println(error.c_str());
+      log_info("Failed to deserialize JSON. Error: %s", error.c_str());
     }
   }
   return false;
@@ -161,33 +160,28 @@ bool loadApplicationConfig() {
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(BOOT_BUTTON, INPUT_PULLUP);
-  
+
   Serial.begin(115200);
   delay(1000);
 
   // Try to connect to stored SSID, start AP if fails after timeout
-  // IPAddress myIP = server.startWiFi(15000, "ESP_AP", "123456789");
+  IPAddress myIP = server.startWiFi(15000, "SATRAN", "");
 
-  WiFi.begin("iPhoneAP", "aat191ee");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
 
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-
-    Serial.println("");
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
-
+  log_info("WiFi connected");
+  log_info("IP address: %s", WiFi.localIP().toString().c_str());
 
   // FILESYSTEM INIT
   if (startFilesystem()) {
     // Load configuration (if not present, default will be created when webserver will start)
     if (loadApplicationConfig())
-      Serial.println(F("Application option loaded"));
+      log_info("Application option loaded");
     else
-      Serial.println(F("Application options NOT loaded!"));
+      log_info("Application options NOT loaded!");
   }
 
   // Configure /setup page
@@ -197,7 +191,7 @@ void setup() {
   server.addOption("Option 2", option2);
 
   // Add custom page handlers
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
     request->send(200, "text/html", homepage);
   });
 
@@ -219,13 +213,9 @@ void setup() {
   // Init with custom WebSocket event handler and start server
   server.init(onWsEvent);
 
-  Serial.print(F("ESP Web Server started on IP Address: "));
-  Serial.println(WiFi.localIP());
-  Serial.println(F(
-    "This is \"withWebSocket.ino\" example.\n"
-    "Open /setup page to configure optional parameters.\n"
-    "Open /edit page to view, edit or upload example or your custom webserver source files."
-  ));
+  log_info("SATRAN Web Server started on IP Address: %s", WiFi.localIP().toString().c_str());
+  log_info("Open /setup page to configure optional parameters.");
+  log_info("Open /edit page to view, edit or upload example or your custom webserver source files.");
 
   // Set hostname
 #ifdef ESP8266
@@ -239,8 +229,8 @@ void setup() {
   // Start MDSN responder
   if (WiFi.status() == WL_CONNECTED) {
     if (MDNS.begin(hostname)) {
-      Serial.println(F("MDNS responder started."));
-      Serial.printf("You should be able to connect with address  http://%s.local/\n", hostname);
+      log_info("MDNS responder started.");
+      log_info("You should be able to connect with address  http://%s.local/", hostname);
       // Add service to MDNS-SD
       MDNS.addService("http", "tcp", 80);
     }
