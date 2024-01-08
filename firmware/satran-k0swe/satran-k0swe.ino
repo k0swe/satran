@@ -27,6 +27,11 @@ AsyncFsWebServer server(80, FILESYSTEM, hostname);
 #define PIN_EL1 13
 #define PIN_EN_MOTORS 15  // PIN_PWM
 
+int minAzValue = 200;
+int maxAzValue = 700;
+int minElValue = 350;
+int maxElValue = 650;
+
 // Log messages both on Serial and WebSocket clients
 void wsLogPrintf(bool toSerial, const char* format, ...) {
   char buffer[128];
@@ -167,7 +172,10 @@ bool loadApplicationConfig() {
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(PIN_SENS_AZ, OUTPUT);
+  pinMode(PIN_SENS_EL, OUTPUT);
   pinMode(PIN_CLEAR_WIFI_BUTTON, INPUT_PULLDOWN_16);
+
 
   Serial.begin(115200);
   delay(1000);
@@ -254,11 +262,55 @@ void loop() {
 #endif
   }
 
-  // Send ESP system time (epoch) to WS client
   static uint32_t sendToClientTime;
   if (millis() - sendToClientTime > 1000) {
     sendToClientTime = millis();
-    time_t now = time(nullptr);
-    wsLogPrintf(false, "{\"esptime\": %d}", (int)now);
+    int azSensor = readSensor("azimuth");
+    int azDeg = readPosition("azimuth");
+    int elSensor = readSensor("elevation");
+    int elDeg = readPosition("elevation");
+    wsLogPrintf(false, "{\"azSensor\": %d, \"elSensor\": %d, \"azDeg\": %d, \"elDeg\": %d}", azSensor, elSensor, azDeg, elDeg);
   }
+}
+
+int readSensor(String value) { /* Read actual values "azimuth" or "elevation" from potentiometers */
+  int reading = 1;
+  if (value == "azimuth") {
+    // azimuth
+    digitalWrite(PIN_SENS_AZ, HIGH);
+    delay(5); /* time to normalize voltage before reading */
+    reading = analogRead(0);
+    for (int x = 0; x < 12; x++) {
+      delay(5);
+      reading = (reading * 0.6) + (analogRead(0) * 0.4); /* running average reduces sensor fluctuation */
+    }
+    digitalWrite(PIN_SENS_AZ, LOW);
+  } else if (value == "elevation") {
+    // elevation
+    digitalWrite(PIN_SENS_EL, HIGH);
+    delay(5); /* time to normalize voltage before reading */
+    reading = analogRead(0);
+    for (int x = 0; x < 12; x++) {
+      delay(5);
+      reading = (reading * 0.6) + (analogRead(0) * 0.4); /* running average reduces sensor fluctuation */
+    }
+    digitalWrite(PIN_SENS_EL, LOW);
+  }
+  return reading;
+}
+
+
+int readPosition(String value) { /* Get position ("azimuth" or "elevation") in degrees */
+  double readPos = 0;
+  int reading = 0;
+  if (value == "azimuth") {
+    int readAz = readSensor("azimuth");
+    readPos = (readAz - minAzValue) * 360 / (maxAzValue - minAzValue);
+    reading = round(readPos);
+  } else if (value == "elevation") {
+    int readEl = readSensor("elevation");
+    readPos = (readEl - minElValue) * 90 / (maxElValue - minElValue);
+    reading = round(readPos);
+  }
+  return reading;
 }
