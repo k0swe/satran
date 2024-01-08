@@ -36,6 +36,11 @@ int minElValue = 350;
 /* Initial maximum elevation sensor value, corresponds to 90 degrees from horizon (zenith). */
 int maxElValue = 650;
 
+/* Target azimuth in degrees to which we want to point. */
+int targetAzDeg = 0;
+/* Target elevation in degrees to which we want to point. */
+int targetElDeg = 0;
+
 // Log messages both on Serial and WebSocket clients
 void wsLogPrintf(bool toSerial, const char* format, ...) {
   char buffer[128];
@@ -164,7 +169,6 @@ void setup() {
   pinMode(PIN_SENS_EL, OUTPUT);
   pinMode(PIN_CLEAR_WIFI_BUTTON, INPUT_PULLDOWN_16);
 
-
   Serial.begin(115200);
   delay(1000);
 
@@ -183,7 +187,7 @@ void setup() {
   if (startFilesystem()) {
     // Load configuration (if not present, default will be created when web server will start)
     if (loadApplicationConfig())
-      log_info("Application option loaded");
+      log_info("Application options loaded");
     else
       log_info("Application options NOT loaded!");
   }
@@ -209,6 +213,11 @@ void setup() {
     strcpy(fsInfo->fsName, "LittleFS");
   });
 #endif
+
+  targetAzDeg = readPosition("azimuth");
+  targetElDeg = readPosition("elevation");
+
+  // initialize motors
 
   // Init with custom WebSocket event handler and start server
   server.init(onWsEvent);
@@ -258,6 +267,8 @@ void loop() {
     doc["azDeg"] = readPosition("azimuth");
     doc["elSensor"] = readSensor("elevation");
     doc["elDeg"] = readPosition("elevation");
+    doc["targetAzDeg"] = targetAzDeg;
+    doc["targetElDeg"] = targetElDeg;
     serializeJson(doc, jsonStr);
     wsLogPrintf(false, "%s", jsonStr);
   }

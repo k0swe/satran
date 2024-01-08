@@ -32,7 +32,29 @@
     </style>
     <script>
       function parseMessage(msg) {
-        console.log(msg);
+        const obj = JSON.parse(msg);
+        if (obj.hasOwnProperty("azDeg") && obj.hasOwnProperty("elDeg")) {
+          const azimuthDeg = obj["azDeg"];
+          const elevationDeg = obj["elDeg"];
+          document.getElementById("currentAzimuth").value = azimuthDeg;
+          document.getElementById("currentElevation").value = elevationDeg;
+        }
+        if (obj.hasOwnProperty("azSensor") && obj.hasOwnProperty("elSensor")) {
+          const azimuthSensor = obj["azSensor"];
+          const elevationSensor = obj["elSensor"];
+          document.getElementById("azSensor").innerText = azimuthSensor;
+          document.getElementById("elSensor").innerText = elevationSensor;
+        }
+        if (
+          obj.hasOwnProperty("targetAzDeg") &&
+          obj.hasOwnProperty("targetElDeg")
+        ) {
+          const targetAzimuth = obj["targetAzDeg"];
+          const targetElevation = obj["targetElDeg"];
+          document.getElementById("targetAzimuth").placeholder = targetAzimuth;
+          document.getElementById("targetElevation").placeholder =
+            targetElevation;
+        }
       }
 
       // Configure and start WebSocket client
@@ -41,14 +63,6 @@
           "arduino",
         ]);
         ws.binaryType = "arraybuffer";
-        ws.onopen = function (e) {
-          addMessage(
-            "WebSocket client connected to " +
-              "ws://" +
-              document.location.host +
-              "/ws"
-          );
-        };
         ws.onmessage = function (e) {
           parseMessage(e.data);
         };
@@ -62,47 +76,42 @@
   </head>
   <body style="text-align: center" onload="onBodyLoad()">
     <h1>SATRAN Rotator</h1>
-    <p></p>
-    <form method="get" action="manual">
-      Azimuth (1 - 360) <br />
-      <input
-        type="number"
-        id="az"
-        name="az"
-        min="1"
-        max="360"
-        value="{posAz}"
-        placeholder="{posAz}"
-      />
-      <br />
-      Elevation (1 - 90) <br />
-      <input
-        type="number"
-        id="el"
-        name="el"
-        min="1"
-        max="90"
-        value="{posEl}"
-        placeholder="{posEl}"
-      />
-      <br />
-      <input type="submit" value="Execute" />
-    </form>
+    <div style="display: flex; flex-direction: row; justify-content: center">
+      <div>
+        Current Azimuth <br />
+        <input
+          type="number"
+          id="currentAzimuth"
+          name="currentAzimuth"
+          disabled
+        />
+        <br />
+        Current Elevation <br />
+        <input
+          type="number"
+          id="currentElevation"
+          name="currentElevation"
+          disabled
+        />
+        <br />
+      </div>
+      <div>
+        <form method="get" action="manual">
+          Target Azimuth <br />
+          <input type="number" id="targetAzimuth" name="targetAzimuth" />
+          <br />
+          Target Elevation <br />
+          <input type="number" id="targetElevation" name="targetElevation" />
+          <input type="submit" value="Execute" />
+        </form>
+      </div>
+    </div>
     <p style="font-size: 0.8em; color: #888">
-      SATRAN firmware 2.1.1<br />
+      SATRAN firmware 3.0-rc<br />
+      &copy; 2024-01-08 K0SWE<br />
       &copy; 2022-10-19 Danaco<br />
-      Current position: Azimuth {newAz} (memory {posAz}) / Elevation {newEl}
-      (memory {posEl}) degrees<br />
-      Sensor values: Azimuth {readAz} / Elevation {readEl}
-      <script>
-        (function () {
-          var queries = new URLSearchParams(window.location.search);
-          var az = document.getElementById("az");
-          var el = document.getElementById("el");
-          az.value = queries.get("az");
-          el.value = queries.get("el");
-        })();
-      </script>
+      Sensor values: Azimuth <span id="azSensor"></span>, Elevation
+      <span id="elSensor"></span>
     </p>
   </body>
 </html>
