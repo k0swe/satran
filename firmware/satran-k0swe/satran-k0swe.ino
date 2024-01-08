@@ -265,11 +265,14 @@ void loop() {
   static uint32_t sendToClientTime;
   if (millis() - sendToClientTime > 1000) {
     sendToClientTime = millis();
-    int azSensor = readSensor("azimuth");
-    int azDeg = readPosition("azimuth");
-    int elSensor = readSensor("elevation");
-    int elDeg = readPosition("elevation");
-    wsLogPrintf(false, "{\"azSensor\": %d, \"elSensor\": %d, \"azDeg\": %d, \"elDeg\": %d}", azSensor, elSensor, azDeg, elDeg);
+    JsonDocument doc;
+    char jsonStr[100];
+    doc["azSensor"] = readSensor("azimuth");
+    doc["azDeg"] = readPosition("azimuth");
+    doc["elSensor"] = readSensor("elevation");
+    doc["elDeg"] = readPosition("elevation");
+    serializeJson(doc, jsonStr);
+    wsLogPrintf(false, "%s", jsonStr);
   }
 }
 
