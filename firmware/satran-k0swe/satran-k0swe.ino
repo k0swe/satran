@@ -78,24 +78,6 @@ String option1 = "Test option String";
 uint32_t option2 = 1234567890;
 uint8_t ledPin = LED_BUILTIN;
 
-// Timezone definition to get properly time from NTP server
-#define MYTZ "CET-1CEST,M3.5.0,M10.5.0/3"
-struct tm Time;
-
-
-////////////////////////////////  NTP Time  /////////////////////////////////////
-void getUpdatedtime(const uint32_t timeout) {
-  uint32_t start = millis();
-  log_info("Sync time...");
-  while (millis() - start < timeout && Time.tm_year <= (1970 - 1900)) {
-    time_t now = time(nullptr);
-    Time = *localtime(&now);
-    delay(5);
-  }
-  log_info(" done.");
-}
-
-
 ////////////////////////////////  Filesystem  /////////////////////////////////////////
 void listDir(fs::FS& fs, const char* dirname, uint8_t levels) {
   log_info("Listing directory: %s", dirname);
@@ -231,10 +213,8 @@ void setup() {
   // Set hostname
 #ifdef ESP8266
   WiFi.hostname(hostname);
-  configTime(MYTZ, "time.google.com", "time.windows.com", "pool.ntp.org");
 #elif defined(ESP32)
   WiFi.setHostname(hostname);
-  configTzTime(MYTZ, "time.google.com", "time.windows.com", "pool.ntp.org");
 #endif
 
   // Start MDSN responder
