@@ -116,7 +116,7 @@ bool startFilesystem() {
     listDir(LittleFS, "/", 1);
     return true;
   } else {
-    log_info("ERROR on mounting filesystem. It will be formmatted!");
+    log_info("ERROR on mounting filesystem. It will be formatted!");
     FILESYSTEM.format();
     ESP.restart();
   }
@@ -181,7 +181,7 @@ void setup() {
 
   // FILESYSTEM INIT
   if (startFilesystem()) {
-    // Load configuration (if not present, default will be created when webserver will start)
+    // Load configuration (if not present, default will be created when web server will start)
     if (loadApplicationConfig())
       log_info("Application option loaded");
     else
@@ -195,7 +195,7 @@ void setup() {
   server.addOption("minElValue", minElValue);
   server.addOption("maxElValue", maxElValue);
 
-  // Enable ACE FS file web editor and add FS info callback fucntion
+  // Enable ACE FS file web editor and add FS info callback function
   server.enableFsCodeEditor();
   /*
   * Getting FS info (total and free bytes) is strictly related to
@@ -215,7 +215,7 @@ void setup() {
 
   log_info("SATRAN Web Server started on IP Address: %s", WiFi.localIP().toString().c_str());
   log_info("Open /setup page to configure optional parameters.");
-  log_info("Open /edit page to view, edit or upload example or your custom webserver source files.");
+  log_info("Open /edit page to view, edit or upload example or your custom web server source files.");
 
   // Set hostname
 #ifdef ESP8266
@@ -224,7 +224,7 @@ void setup() {
   WiFi.setHostname(hostname);
 #endif
 
-  // Start MDSN responder
+  // Start MDNS responder
   if (WiFi.status() == WL_CONNECTED) {
     if (MDNS.begin(hostname)) {
       log_info("MDNS responder started.");
