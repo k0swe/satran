@@ -82,11 +82,6 @@ void onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventTyp
   }
 }
 
-// Test "config" values
-String option1 = "Test option String";
-uint32_t option2 = 1234567890;
-uint8_t ledPin = LED_BUILTIN;
-
 ////////////////////////////////  Filesystem  /////////////////////////////////////////
 void listDir(fs::FS& fs, const char* dirname, uint8_t levels) {
   log_info("Listing directory: %s", dirname);
@@ -193,6 +188,7 @@ void setup() {
   }
 
   // Configure /setup page
+  server.setSetupPageTitle("SATRAN Setup");
   server.addOptionBox("SATRAN Configuration");
   server.addOption("minAzValue", minAzValue);
   server.addOption("maxAzValue", maxAzValue);
