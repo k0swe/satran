@@ -27,9 +27,13 @@ AsyncFsWebServer server(80, FILESYSTEM, hostname);
 #define PIN_EL1 13
 #define PIN_EN_MOTORS 15  // PIN_PWM
 
+/* Initial minimum azimuth sensor value, corresponds to 0 degrees north. */
 int minAzValue = 200;
+/* Initial maximum azimuth sensor value, corresponds to 360 degrees north. */
 int maxAzValue = 700;
+/* Initial minimum elevation sensor value, corresponds to 0 degrees from horizon. */
 int minElValue = 350;
+/* Initial maximum elevation sensor value, corresponds to 90 degrees from horizon (zenith). */
 int maxElValue = 650;
 
 // Log messages both on Serial and WebSocket clients
@@ -124,9 +128,10 @@ bool startFilesystem() {
 void saveApplicationConfig() {
   File file = server.getConfigFile("r");
   DynamicJsonDocument doc(file.size() * 1.33);
-  doc["Option 1"] = option1;
-  doc["Option 2"] = option2;
-  doc["LED Pin"] = ledPin;
+  doc["minAzValue"] = minAzValue;
+  doc["maxAzValue"] = maxAzValue;
+  doc["minElValue"] = minElValue;
+  doc["maxElValue"] = maxElValue;
   serializeJsonPretty(doc, file);
   file.close();
   delay(1000);
@@ -140,9 +145,10 @@ bool loadApplicationConfig() {
     DeserializationError error = deserializeJson(doc, file);
     file.close();
     if (!error) {
-      option1 = doc["Option 1"].as<String>();
-      option2 = doc["Option 2"];
-      ledPin = doc["LED Pin"];
+      minAzValue = doc["minAzValue"];
+      maxAzValue = doc["maxAzValue"];
+      minElValue = doc["minElValue"];
+      maxElValue = doc["maxElValue"];
       return true;
     } else {
       log_info("Failed to deserialize JSON. Error: %s", error.c_str());
@@ -183,10 +189,11 @@ void setup() {
   }
 
   // Configure /setup page
-  server.addOptionBox("My Options");
-  server.addOption("LED Pin", ledPin);
-  server.addOption("Option 1", option1.c_str());
-  server.addOption("Option 2", option2);
+  server.addOptionBox("SATRAN Configuration");
+  server.addOption("minAzValue", minAzValue);
+  server.addOption("maxAzValue", maxAzValue);
+  server.addOption("minElValue", minElValue);
+  server.addOption("maxElValue", maxElValue);
 
   // Enable ACE FS file web editor and add FS info callback fucntion
   server.enableFsCodeEditor();
