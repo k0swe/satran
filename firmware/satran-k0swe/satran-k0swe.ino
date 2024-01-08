@@ -8,8 +8,6 @@
 #include <AsyncFsWebServer.h>  // https://github.com/cotestatnt/async-esp-fs-webserver
 #include <SerialLog.h>
 
-#include "index_htm.h"
-
 #define FILESYSTEM LittleFS
 
 char const* hostname = "satran";
@@ -199,11 +197,6 @@ void setup() {
   server.addOption("LED Pin", ledPin);
   server.addOption("Option 1", option1.c_str());
   server.addOption("Option 2", option2);
-
-  // Add custom page handlers
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(200, "text/html", homepage);
-  });
 
   // Enable ACE FS file web editor and add FS info callback fucntion
   server.enableFsCodeEditor();
