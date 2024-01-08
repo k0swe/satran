@@ -18,7 +18,16 @@ AsyncFsWebServer server(80, FILESYSTEM, hostname);
 #ifndef LED_BUILTIN
 #define LED_BUILTIN 2
 #endif
-#define BOOT_BUTTON 0
+
+#define PIN_CLEAR_WIFI_BUTTON 16
+#define PIN_SENS_AZ 5
+#define PIN_SENS_EL 4
+#define PIN_EL2 0
+#define PIN_LED LED_BUILTIN
+#define PIN_AZ2 14
+#define PIN_AZ1 12
+#define PIN_EL1 13
+#define PIN_EN_MOTORS 15  // PIN_PWM
 
 // Log messages both on Serial and WebSocket clients
 void wsLogPrintf(bool toSerial, const char* format, ...) {
@@ -28,7 +37,8 @@ void wsLogPrintf(bool toSerial, const char* format, ...) {
   vsnprintf(buffer, 128, format, args);
   va_end(args);
   server.wsBroadcast(buffer);
-  log_debug(buffer);
+  if (toSerial)
+    log_info("%s", buffer);
 }
 
 // In this example a custom websocket event handler is used instead default
@@ -159,7 +169,7 @@ bool loadApplicationConfig() {
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(BOOT_BUTTON, INPUT_PULLUP);
+  pinMode(PIN_CLEAR_WIFI_BUTTON, INPUT_PULLDOWN_16);
 
   Serial.begin(115200);
   delay(1000);
@@ -240,8 +250,8 @@ void setup() {
 
 void loop() {
 
-  if (digitalRead(BOOT_BUTTON) == LOW) {
-    wsLogPrintf(true, "Button on GPIO %d clicked", BOOT_BUTTON);
+  if (digitalRead(PIN_CLEAR_WIFI_BUTTON) == HIGH) {
+    wsLogPrintf(true, "Button on GPIO %d clicked", PIN_CLEAR_WIFI_BUTTON);
     delay(1000);
   }
 
