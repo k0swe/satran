@@ -73,10 +73,15 @@ void onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventTyp
       {
         AwsFrameInfo* info = (AwsFrameInfo*)arg;
         if (info->opcode == WS_TEXT) {
-          char msg[len + 1];
-          msg[len] = '\0';
-          memcpy(msg, data, len);
-          log_info("Received message \"%s\"", msg);
+          JsonDocument doc;
+          DeserializationError error = deserializeJson(doc, data);
+          if (!error) {
+            targetAzDeg = doc["targetAzDeg"];
+            targetElDeg = doc["targetElDeg"];
+            log_info("Received new target: %d %d", targetAzDeg, targetElDeg);
+          }
+        } else {
+          log_info("Problem deserializing incoming WS message, %s", error);
         }
       }
       break;

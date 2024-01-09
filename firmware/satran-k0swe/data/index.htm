@@ -57,6 +57,17 @@
         }
       }
 
+      function setTarget() {
+        const targetAzimuth = document.getElementById("targetAzimuth").value;
+        const targetElevation =
+          document.getElementById("targetElevation").value;
+        const obj = {
+          targetAzDeg: targetAzimuth,
+          targetElDeg: targetElevation,
+        };
+        ws.send(JSON.stringify(obj));
+      }
+
       // Configure and start WebSocket client
       function startSocket() {
         ws = new WebSocket("ws://" + document.location.host + "/ws", [
@@ -96,14 +107,12 @@
         <br />
       </div>
       <div>
-        <form method="get" action="manual">
-          Target Azimuth <br />
-          <input type="number" id="targetAzimuth" name="targetAzimuth" />
-          <br />
-          Target Elevation <br />
-          <input type="number" id="targetElevation" name="targetElevation" />
-          <input type="submit" value="Execute" />
-        </form>
+        Target Azimuth <br />
+        <input type="number" id="targetAzimuth" name="targetAzimuth" />
+        <br />
+        Target Elevation <br />
+        <input type="number" id="targetElevation" name="targetElevation" />
+        <input type="submit" value="Execute" onclick="setTarget()" />
       </div>
     </div>
     <p style="font-size: 0.8em; color: #888">
