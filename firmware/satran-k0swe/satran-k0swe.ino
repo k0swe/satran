@@ -41,6 +41,10 @@ int targetAzDeg = 0;
 /* Target elevation in degrees to which we want to point. */
 int targetElDeg = 0;
 
+String error;
+int errorAz = 0;
+int errorEl = 0;
+
 // Log messages both on Serial and WebSocket clients
 void wsLogPrintf(bool toSerial, const char* format, ...) {
   char buffer[128];
@@ -159,6 +163,13 @@ bool loadApplicationConfig() {
 
 
 void setup() {
+  pinMode(PIN_AZ1, OUTPUT);
+  pinMode(PIN_AZ2, OUTPUT);
+  pinMode(PIN_EL1, OUTPUT);
+  pinMode(PIN_EL2, OUTPUT);
+  pinMode(PIN_EN_MOTORS, OUTPUT);
+  haltMotors();
+
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(PIN_SENS_AZ, OUTPUT);
   pinMode(PIN_SENS_EL, OUTPUT);
@@ -213,7 +224,8 @@ void setup() {
   targetAzDeg = readPosition("azimuth");
   targetElDeg = readPosition("elevation");
 
-  // initialize motors
+  /* Check that motors and sensors are working, then point north */
+  initializeRotator();
 
   // Init with custom WebSocket event handler and start server
   server.init(onWsEvent);
@@ -253,6 +265,8 @@ void loop() {
     MDNS.update();
 #endif
   }
+
+  turnMotors(targetAzDeg, targetElDeg);
 
   static uint32_t sendToClientTime;
   if (millis() - sendToClientTime > 1000) {
@@ -310,4 +324,145 @@ int readPosition(String value) { /* Get position ("azimuth" or "elevation") in d
     reading = round(readPos);
   }
   return reading;
+}
+
+void initializeRotator(void) { /* Test connection and function of motors and sensors */
+
+  //  If connection is established with sensors
+  if (readSensor("azimuth") > 10 && readSensor("elevation") > 10) {
+    int posAz = readPosition("azimuth");
+    int posEl = readPosition("elevation");
+    int startAz = posAz;
+    int startEl = posEl;
+
+    // Rotate motors
+    int targetAz;
+    int targetEl;
+    if (startAz < 180) {
+      targetAz = startAz + 20;
+    } else {
+      targetAz = startAz - 20;
+    }
+    if (startEl < 45) {
+      targetEl = 50;
+    } else {
+      targetEl = 30;
+    }
+    turnMotors(targetAz, targetEl);
+    int newAz = readPosition("azimuth");
+    int readAzChange = abs(startAz - newAz);
+    int newEl = readPosition("elevation");
+    int readElChange = abs(startEl - newEl);
+
+    // Return true only if the sensors registered motion
+    if (readAzChange < 5) {
+      error = "Azimuth sensor did not register motion when initializing (Measured change: " + (String)readAzChange + ")";
+    } else if (readElChange < 5) {
+      error = "Elevation sensor did not register motion when initializing (Measured change: " + (String)readElChange + ")";
+    } else {
+      // If no errors and rotator has been previously calibrated; move to north
+      if (minAzValue != 200 || maxAzValue != 700 || minElValue != 350 || maxElValue != 650) {
+        delay(500);
+        turnMotors(0, 5);
+      }
+    }
+    posAz = readPosition("azimuth");
+    posEl = readPosition("elevation");
+
+  } else {
+    String az = String(readSensor("azimuth"));
+    String el = String(readSensor("elevation"));
+    error = "could not initialize, missing sensor connection (Azimuth " + az + " Elevation " + el + ")";
+  }
+  log_info("Rotator initialized successfully");
+}
+
+void turnMotors(int azTarget, int elTarget) { /* Move motor towards target in degrees */
+
+  int azPos;
+  int elPos;
+  bool motionAz = false;
+  bool motionEl = false;
+  int newAz = readPosition("azimuth");
+  int newEl = readPosition("elevation");
+
+  // Enable motors
+  analogWrite(PIN_EN_MOTORS, 250);
+
+
+  // Set actual current position to the one measured and not the last known
+  azPos = newAz;
+  elPos = newEl;
+
+  if (azPos < azTarget && abs(azPos - azTarget) > 4) {
+    // turn right CW
+    digitalWrite(PIN_AZ1, HIGH);
+    motionAz = true;
+  } else if (abs(azPos - azTarget) > 4) {
+    // turn left CCW
+    digitalWrite(PIN_AZ2, HIGH);
+    motionAz = true;
+  }
+
+  if (elPos > elTarget && abs(elPos - elTarget) > 2) {
+    // turn down
+    digitalWrite(PIN_EL1, HIGH);
+    motionEl = true;
+  } else if (abs(elPos - elTarget) > 2) {
+    // turn up
+    digitalWrite(PIN_EL2, HIGH);
+    motionEl = true;
+  }
+
+  int n = 0;
+  while (motionAz == true || motionEl == true) {
+    if (motionAz == true) {
+      newAz = readPosition("azimuth");
+
+      errorAz = 0;
+      if (azPos < azTarget && newAz > (azTarget - 5)) {
+        digitalWrite(PIN_AZ1, LOW);
+        digitalWrite(PIN_AZ2, LOW);
+        motionAz = false;
+      }
+      if (azPos > azTarget && newAz < (azTarget + 5)) {
+        digitalWrite(PIN_AZ1, LOW);
+        digitalWrite(PIN_AZ2, LOW);
+        motionAz = false;
+      }
+    }
+
+    if (motionEl == true) {
+      newEl = readPosition("elevation");
+
+      errorEl = 0;
+      if (elPos > elTarget && newEl < (elTarget + 3)) {
+        digitalWrite(PIN_EL1, LOW);
+        digitalWrite(PIN_EL2, LOW);
+        motionEl = false;
+      }
+      if (elPos < elTarget && newEl > (elTarget - 3)) {
+        digitalWrite(PIN_EL1, LOW);
+        digitalWrite(PIN_EL2, LOW);
+        motionEl = false;
+      }
+    }
+
+    delay(1);
+    if (n == 6000) { /*timeout*/
+      error = "Motion timeout. Check cables/mechanics and restart device.";
+      motionAz = false;
+      motionEl = false;
+    }
+    n++;
+  }  //endwhile
+  haltMotors();
+}
+
+void haltMotors(void) { /* Turn off all motor output pins, and stop motor */
+  digitalWrite(PIN_AZ1, LOW);
+  digitalWrite(PIN_AZ2, LOW);
+  digitalWrite(PIN_EL1, LOW);
+  digitalWrite(PIN_EL2, LOW);
+  analogWrite(PIN_EN_MOTORS, 0); /* Disable the h-bridge */
 }
