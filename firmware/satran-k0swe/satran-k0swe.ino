@@ -12,6 +12,9 @@
 
 char const* hostname = "satran";
 AsyncFsWebServer server(80, FILESYSTEM, hostname);
+/* Hamlib/rotctl TCP server */
+WiFiServer rotCtlServer(4533);
+WiFiClient rotCtlClient;
 
 #ifndef LED_BUILTIN
 #define LED_BUILTIN 2
@@ -45,6 +48,7 @@ String error;
 int errorAz = 0;
 int errorEl = 0;
 
+
 // Log messages both on Serial and WebSocket clients
 void wsLogPrintf(bool toSerial, const char* format, ...) {
   char buffer[128];
@@ -76,8 +80,12 @@ void onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, AwsEventTyp
           JsonDocument doc;
           DeserializationError error = deserializeJson(doc, data);
           if (!error) {
-            targetAzDeg = doc["targetAzDeg"];
-            targetElDeg = doc["targetElDeg"];
+            if (doc.containsKey("targetAzDeg")) {
+              targetAzDeg = doc["targetAzDeg"];
+            }
+            if (doc.containsKey("targetElDeg")) {
+              targetElDeg = doc["targetElDeg"];
+            }
             log_info("Received new target: %d %d", targetAzDeg, targetElDeg);
           }
         } else {
@@ -234,10 +242,12 @@ void setup() {
 
   // Init with custom WebSocket event handler and start server
   server.init(onWsEvent);
+  rotCtlServer.begin();
 
   log_info("SATRAN Web Server started on IP Address: %s", WiFi.localIP().toString().c_str());
   log_info("Open /setup page to configure optional parameters.");
   log_info("Open /edit page to view, edit or upload example or your custom web server source files.");
+  log_info("rotctld available on %s:%d", WiFi.localIP().toString().c_str(), rotCtlServer.port());
 
   // Set hostname
 #ifdef ESP8266
@@ -253,6 +263,7 @@ void setup() {
       log_info("You should be able to connect with address  http://%s.local/", hostname);
       // Add service to MDNS-SD
       MDNS.addService("http", "tcp", 80);
+      MDNS.addService("rotctl", "tcp", rotCtlServer.port());
     }
   }
 }
@@ -270,6 +281,8 @@ void loop() {
     MDNS.update();
 #endif
   }
+
+  handleRotCtl();
 
   turnMotors(targetAzDeg, targetElDeg);
 
@@ -470,4 +483,77 @@ void haltMotors(void) { /* Turn off all motor output pins, and stop motor */
   digitalWrite(PIN_EL1, LOW);
   digitalWrite(PIN_EL2, LOW);
   analogWrite(PIN_EN_MOTORS, 0); /* Disable the h-bridge */
+}
+
+void handleRotCtl(void) {
+  /* Hamlib/rotctl TCP socket */
+  if (!rotCtlClient) {
+    rotCtlClient = rotCtlServer.available();
+  }
+  if (!rotCtlClient || !rotCtlClient.connected()) {
+    return;
+  }
+  String rotctl;
+  while (rotCtlClient && rotCtlClient.connected()) {
+    rotctl = rotCtlClient.readStringUntil('\n');
+    // log_info("rotctl cmd: %s", rotctl.c_str());
+    if (char(rotctl[0]) == 'p' || rotctl.indexOf("get_pos") > 0) {
+      int azPos = readPosition("azimuth");
+      int elPos = readPosition("elevation");
+      if (azPos > -1 && azPos < 361 && elPos > -1 && elPos < 91) {
+        rotCtlClient.print(String(azPos) + ".0\n" + String(elPos) + ".0\n");
+      } else {
+        rotCtlClient.print("RPRT -6\n");
+      }
+      return;
+    }
+    if (char(rotctl[0]) == 'P' || rotctl.indexOf("set_pos") > 0) {
+      int divider;
+      if (char(rotctl[0]) == 'P') {
+        divider = 2;
+      } else {
+        divider = 8;
+      }
+      String part1 = rotctl.substring(divider, rotctl.indexOf(" ", divider));
+      String part2 = rotctl.substring(rotctl.indexOf(" ", divider), rotctl.length());
+      int newAz = part1.toInt();
+      int newEl = part2.toInt();
+      if (newAz > -1 && newAz < 361 && newEl > -1 && newEl < 91) {
+        targetAzDeg = newAz;
+        targetElDeg = newEl;
+        rotCtlClient.print("RPRT 0\n");
+      } else {
+        rotCtlClient.print("RPRT -6\n");
+      }
+      return;
+    }
+    if (char(rotctl[0]) == 'M' || rotctl.indexOf("move") > 0) {
+      rotCtlClient.print("RPRT -4\n");
+      return; /* command not supported by satran */
+    }
+    if (char(rotctl[0]) == 'C' || rotctl.indexOf("set_conf") > 0) {
+      rotCtlClient.print("RPRT -4\n");
+      return; /* command not supported by satran */
+    }
+    if (char(rotctl[0]) == 'S' || rotctl.indexOf("stop") > 0) { /* Stop */
+      haltMotors();
+      rotCtlClient.print("RPRT 0\n");
+      return;
+    }
+    if (char(rotctl[0]) == 'K' || rotctl.indexOf("park") > 0) { /* Park */
+      initializeRotator();
+      rotCtlClient.print("RPRT 0\n");
+      return;
+    }
+    if (char(rotctl[0]) == '_' || rotctl.indexOf("get_info") > 0) {
+      rotCtlClient.print("Info SATRAN v.2.1.1 az/el rotator\n");
+      return;
+    }
+    if (char(rotctl[0]) == 'R' || rotctl.indexOf("reset") > 0) {
+      rotCtlClient.stop();
+      ESP.restart();
+      return;
+    }
+    rotctl = "";
+  }
 }

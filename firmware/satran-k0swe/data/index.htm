@@ -61,12 +61,21 @@
         const targetAzimuth = document.getElementById("targetAzimuth").value;
         const targetElevation =
           document.getElementById("targetElevation").value;
-        const obj = {
-          targetAzDeg: targetAzimuth,
-          targetElDeg: targetElevation,
-        };
+        let obj = {};
+        if (targetAzimuth !== "") {
+          obj["targetAzDeg"] = targetAzimuth;
+        }
+        if (targetElevation !== "") {
+          obj["targetElDeg"] = targetElevation;
+        }
         ws.send(JSON.stringify(obj));
       }
+
+      keyDownHandler = (event) => {
+        if (event.code === "Enter") {
+          setTarget();
+        }
+      };
 
       // Configure and start WebSocket client
       function startSocket() {
@@ -77,11 +86,25 @@
         ws.onmessage = function (e) {
           parseMessage(e.data);
         };
+        ws.addEventListener("close", function (event) {
+          console.log("WS connection closed");
+          setTimeout(startSocket, 5000);
+        });
+        ws.addEventListener("error", function (event) {
+          console.log("WS connection error", event);
+          setTimeout(startSocket, 5000);
+        });
       }
 
       // When page is fully loaded start connection
       function onBodyLoad() {
         startSocket();
+        document
+          .getElementById("targetAzimuth")
+          .addEventListener("keydown", keyDownHandler, true);
+        document
+          .getElementById("targetElevation")
+          .addEventListener("keydown", keyDownHandler, true);
       }
     </script>
   </head>
@@ -108,11 +131,11 @@
       </div>
       <div>
         Target Azimuth <br />
-        <input type="number" id="targetAzimuth" name="targetAzimuth" />
+        <input type="number" id="targetAzimuth" />
         <br />
         Target Elevation <br />
-        <input type="number" id="targetElevation" name="targetElevation" />
-        <input type="submit" value="Execute" onclick="setTarget()" />
+        <input type="number" id="targetElevation" />
+        <input type="submit" value="Execute" onsubmit="setTarget()" />
       </div>
     </div>
     <p style="font-size: 0.8em; color: #888">
