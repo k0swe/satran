@@ -412,23 +412,31 @@ void turnMotors(int azTarget, int elTarget) { /* Move motor towards target in de
   azPos = newAz;
   elPos = newEl;
 
+  int speed = 255;
+  if (abs(azPos - azTarget) < 20) {
+    speed = 128;
+  }
   if (azPos < azTarget && abs(azPos - azTarget) > 4) {
     // turn right CW
-    digitalWrite(PIN_AZ1, HIGH);
+    analogWrite(PIN_AZ1, speed);
     motionAz = true;
   } else if (abs(azPos - azTarget) > 4) {
     // turn left CCW
-    digitalWrite(PIN_AZ2, HIGH);
+    analogWrite(PIN_AZ2, speed);
     motionAz = true;
   }
 
+  speed = 255;
+  if (abs(elPos - elTarget) < 20) {
+    speed = 128;
+  }
   if (elPos > elTarget && abs(elPos - elTarget) > 2) {
     // turn down
-    digitalWrite(PIN_EL1, HIGH);
+    analogWrite(PIN_EL1, speed);
     motionEl = true;
   } else if (abs(elPos - elTarget) > 2) {
     // turn up
-    digitalWrite(PIN_EL2, HIGH);
+    analogWrite(PIN_EL2, speed);
     motionEl = true;
   }
 
@@ -439,13 +447,13 @@ void turnMotors(int azTarget, int elTarget) { /* Move motor towards target in de
 
       errorAz = 0;
       if (azPos < azTarget && newAz > (azTarget - 5)) {
-        digitalWrite(PIN_AZ1, LOW);
-        digitalWrite(PIN_AZ2, LOW);
+        analogWrite(PIN_AZ1, LOW);
+        analogWrite(PIN_AZ2, LOW);
         motionAz = false;
       }
       if (azPos > azTarget && newAz < (azTarget + 5)) {
-        digitalWrite(PIN_AZ1, LOW);
-        digitalWrite(PIN_AZ2, LOW);
+        analogWrite(PIN_AZ1, LOW);
+        analogWrite(PIN_AZ2, LOW);
         motionAz = false;
       }
     }
@@ -455,13 +463,13 @@ void turnMotors(int azTarget, int elTarget) { /* Move motor towards target in de
 
       errorEl = 0;
       if (elPos > elTarget && newEl < (elTarget + 3)) {
-        digitalWrite(PIN_EL1, LOW);
-        digitalWrite(PIN_EL2, LOW);
+        analogWrite(PIN_EL1, LOW);
+        analogWrite(PIN_EL2, LOW);
         motionEl = false;
       }
       if (elPos < elTarget && newEl > (elTarget - 3)) {
-        digitalWrite(PIN_EL1, LOW);
-        digitalWrite(PIN_EL2, LOW);
+        analogWrite(PIN_EL1, LOW);
+        analogWrite(PIN_EL2, LOW);
         motionEl = false;
       }
     }
