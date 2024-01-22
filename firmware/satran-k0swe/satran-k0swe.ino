@@ -1,3 +1,6 @@
+// For NodeMCU, add to additional boards manager:
+// https://arduino.esp8266.com/stable/package_esp8266com_index.json
+
 #if defined(ESP8266)
 #include <ESP8266mDNS.h>
 #elif defined(ESP32)
