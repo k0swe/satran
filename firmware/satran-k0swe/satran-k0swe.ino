@@ -7,6 +7,8 @@
 #include <LittleFS.h>
 #include <AsyncFsWebServer.h>  // https://github.com/cotestatnt/async-esp-fs-webserver
 #include <SerialLog.h>
+#include <PID.h>  // https://github.com/ettoreleandrotognoli/ArcPID/
+
 
 #define FILESYSTEM LittleFS
 
@@ -43,6 +45,9 @@ int maxElValue = 650;
 int targetAzDeg = 0;
 /* Target elevation in degrees to which we want to point. */
 int targetElDeg = 0;
+
+/* PID controller for azimuth. */
+arc::PID<double> azPid(5.0, 0.5, 0.2);
 
 String error;
 int errorAz = 0;
@@ -234,8 +239,8 @@ void setup() {
   });
 #endif
 
-  targetAzDeg = readPosition("azimuth");
-  targetElDeg = readPosition("elevation");
+  targetAzDeg = 180;
+  targetElDeg = 45;
 
   /* Check that motors and sensors are working, then point north */
   initializeRotator();
@@ -302,25 +307,26 @@ void loop() {
   }
 }
 
-int readSensor(String value) { /* Read actual values "azimuth" or "elevation" from potentiometers */
+/* Read current sensor values "azimuth" or "elevation" from potentiometers. */
+int readSensor(String value) {
   int reading = 1;
   if (value == "azimuth") {
     // azimuth
     digitalWrite(PIN_SENS_AZ, HIGH);
-    delay(5); /* time to normalize voltage before reading */
+    delay(10); /* time to normalize voltage before reading */
     reading = analogRead(0);
     for (int x = 0; x < 12; x++) {
-      delay(5);
+      delay(10);
       reading = (reading * 0.6) + (analogRead(0) * 0.4); /* running average reduces sensor fluctuation */
     }
     digitalWrite(PIN_SENS_AZ, LOW);
   } else if (value == "elevation") {
     // elevation
     digitalWrite(PIN_SENS_EL, HIGH);
-    delay(5); /* time to normalize voltage before reading */
+    delay(10); /* time to normalize voltage before reading */
     reading = analogRead(0);
     for (int x = 0; x < 12; x++) {
-      delay(5);
+      delay(10);
       reading = (reading * 0.6) + (analogRead(0) * 0.4); /* running average reduces sensor fluctuation */
     }
     digitalWrite(PIN_SENS_EL, LOW);
@@ -329,7 +335,8 @@ int readSensor(String value) { /* Read actual values "azimuth" or "elevation" fr
 }
 
 
-int readPosition(String value) { /* Get position ("azimuth" or "elevation") in degrees */
+/* Get current position ("azimuth" or "elevation") in degrees. */
+int readPosition(String value) {
   double readPos = 0;
   int reading = 0;
   if (value == "azimuth") {
@@ -366,7 +373,9 @@ void initializeRotator(void) { /* Test connection and function of motors and sen
     } else {
       targetEl = 30;
     }
-    turnMotors(targetAz, targetEl);
+    for (int i = 0; i < 50; i++) {
+      turnMotors(targetAz, targetEl);
+    }
     int newAz = readPosition("azimuth");
     int readAzChange = abs(startAz - newAz);
     int newEl = readPosition("elevation");
@@ -395,94 +404,50 @@ void initializeRotator(void) { /* Test connection and function of motors and sen
   log_info("Rotator initialized successfully");
 }
 
-void turnMotors(int azTarget, int elTarget) { /* Move motor towards target in degrees */
+/* Move motors towards target. Arguments in degrees. */
+void turnMotors(int azTarget, int elTarget) {
 
-  int azPos;
-  int elPos;
-  bool motionAz = false;
-  bool motionEl = false;
-  int newAz = readPosition("azimuth");
-  int newEl = readPosition("elevation");
+  int currentAz = readPosition("azimuth");
+  int currentEl = readPosition("elevation");
 
   // Enable motors
-  analogWrite(PIN_EN_MOTORS, 250);
+  analogWrite(PIN_EN_MOTORS, 255);
 
-
-  // Set actual current position to the one measured and not the last known
-  azPos = newAz;
-  elPos = newEl;
-
-  int speed = 255;
-  if (abs(azPos - azTarget) < 20) {
-    speed = 128;
-  }
-  if (azPos < azTarget && abs(azPos - azTarget) > 4) {
-    // turn right CW
-    analogWrite(PIN_AZ1, speed);
-    motionAz = true;
-  } else if (abs(azPos - azTarget) > 4) {
-    // turn left CCW
-    analogWrite(PIN_AZ2, speed);
-    motionAz = true;
+  azPid.setInput(currentAz);
+  azPid.setTarget(azTarget);
+  int speed = azPid.getOutput();
+  log_info("az current %d, target %d, speed %d", currentAz, azTarget, speed);
+  if (speed != 0) {
+    int azPin = PIN_AZ1;  // turn clockwise
+    int azZeroPin = PIN_AZ2;
+    if (speed < 0) {
+      azPin = PIN_AZ2;  // turn counter-clockwise
+      azZeroPin = PIN_AZ1;
+    }
+    speed = abs(speed);
+    speed = min(speed, 255);  // max speed
+    speed = max(speed, 60);   // stall speed
+    log_info("turning at %d", speed);
+    analogWrite(azPin, speed);
+    analogWrite(azZeroPin, 0);
   }
 
   speed = 255;
-  if (abs(elPos - elTarget) < 20) {
+  if (abs(currentEl - elTarget) < 20) {
     speed = 128;
   }
-  if (elPos > elTarget && abs(elPos - elTarget) > 2) {
+  if (currentEl > elTarget && abs(currentEl - elTarget) > 2) {
     // turn down
     analogWrite(PIN_EL1, speed);
-    motionEl = true;
-  } else if (abs(elPos - elTarget) > 2) {
+    analogWrite(PIN_EL2, 0);
+  } else if (abs(currentEl - elTarget) > 2) {
     // turn up
     analogWrite(PIN_EL2, speed);
-    motionEl = true;
+    analogWrite(PIN_EL1, 0);
   }
 
-  int n = 0;
-  while (motionAz == true || motionEl == true) {
-    if (motionAz == true) {
-      newAz = readPosition("azimuth");
-
-      errorAz = 0;
-      if (azPos < azTarget && newAz > (azTarget - 5)) {
-        analogWrite(PIN_AZ1, LOW);
-        analogWrite(PIN_AZ2, LOW);
-        motionAz = false;
-      }
-      if (azPos > azTarget && newAz < (azTarget + 5)) {
-        analogWrite(PIN_AZ1, LOW);
-        analogWrite(PIN_AZ2, LOW);
-        motionAz = false;
-      }
-    }
-
-    if (motionEl == true) {
-      newEl = readPosition("elevation");
-
-      errorEl = 0;
-      if (elPos > elTarget && newEl < (elTarget + 3)) {
-        analogWrite(PIN_EL1, LOW);
-        analogWrite(PIN_EL2, LOW);
-        motionEl = false;
-      }
-      if (elPos < elTarget && newEl > (elTarget - 3)) {
-        analogWrite(PIN_EL1, LOW);
-        analogWrite(PIN_EL2, LOW);
-        motionEl = false;
-      }
-    }
-
-    delay(1);
-    if (n == 6000) { /*timeout*/
-      error = "Motion timeout. Check cables/mechanics and restart device.";
-      motionAz = false;
-      motionEl = false;
-    }
-    n++;
-  }  //endwhile
-  haltMotors();
+  delay(25);
+  // haltMotors();
 }
 
 void haltMotors(void) { /* Turn off all motor output pins, and stop motor */
