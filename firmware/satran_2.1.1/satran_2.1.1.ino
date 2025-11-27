@@ -30,6 +30,8 @@ String hostName = "SATRAN_VhfSUghPX";
 WiFiServer server2(4533);
 WiFiClient client1;
 String rotctl;
+unsigned long lastClientActivity = 0;
+const unsigned long CLIENT_TIMEOUT = 30000;  // 30 second timeout
 
 String page;
 String page2;
@@ -72,7 +74,7 @@ void setup(void) {
   pinMode(Pin_PWM, OUTPUT);
   haltMotors();
   pinMode(Pin_LED, OUTPUT);
-  digitalWrite(Pin_LED, HIGH); /* Turn off status LED. Reverse logic! */
+  digitalWrite(Pin_LED, LOW);  /* Turn off status LED. Reverse logic! */
   pinMode(Pin_SensAz, OUTPUT); /* Outputs that later are read by ADC pin */
   pinMode(Pin_SensEl, OUTPUT);
   digitalWrite(Pin_SensAz, LOW);
@@ -121,10 +123,40 @@ void setup(void) {
   server.on("/", []() {
     int newAz = readPosition("azimuth");
     int newEl = readPosition("elevation");
+    page.reserve(1500);  // Pre-allocate to reduce fragmentation
+    page = pageheader;
     if (error == "") {
-      page = pageheader + "<body style='text-align:center;'><h1>SATRAN Rotator</h1><p><form action='./manual' method='get'>Azimuth (1 - 360)<br/><input type='number' id='az' name='az' min='1' max='360' value=\"" + posAz + "\" placeholder=\"" + posAz + "\"><br/>Elevation (1 - 90)<br/><input type='number' id='el' name='el' min='1' max='90' value=\"" + posEl + "\" placeholder=\"" + posEl + "\"><br/><input type='submit' value='Execute'></form></p><p style='font-size:0.8em;color:#888;'>" + versioncode + "<br/>Current position: Azimuth " + newAz + " (memory " + posAz + ") / Elevation " + newEl + " (memory " + posEl + ") degrees<br/>Sensor values: Azimuth " + readAz + " / Elevation " + readEl + "</p>" + formvalues + "</body></html>";
+      page += F("<body style='text-align:center;'><h1>SATRAN Rotator</h1><p><form action='./manual' method='get'>Azimuth (1 - 360)<br/><input type='number' id='az' name='az' min='1' max='360' value=\"");
+      page += posAz;
+      page += F("\" placeholder=\"");
+      page += posAz;
+      page += F("\"><br/>Elevation (1 - 90)<br/><input type='number' id='el' name='el' min='1' max='90' value=\"");
+      page += posEl;
+      page += F("\" placeholder=\"");
+      page += posEl;
+      page += F("\"><br/><input type='submit' value='Execute'></form></p><p style='font-size:0.8em;color:#888;'>");
+      page += versioncode;
+      page += F("<br/>Current position: Azimuth ");
+      page += newAz;
+      page += F(" (memory ");
+      page += posAz;
+      page += F(") / Elevation ");
+      page += newEl;
+      page += F(" (memory ");
+      page += posEl;
+      page += F(") degrees<br/>Sensor values: Azimuth ");
+      page += readAz;
+      page += F(" / Elevation ");
+      page += readEl;
+      page += F("</p>");
+      page += formvalues;
+      page += F("</body></html>");
     } else {
-      page = pageheader + "<body style='text-align:center;'><h1>SATRAN Rotator</h1><p><strong>" + error + "</strong></p><p style='font-size:0.8em;color:#888;'>" + versioncode + "</p></body></html>";
+      page += F("<body style='text-align:center;'><h1>SATRAN Rotator</h1><p><strong>");
+      page += error;
+      page += F("</strong></p><p style='font-size:0.8em;color:#888;'>");
+      page += versioncode;
+      page += F("</p></body></html>");
     }
     server.send(200, "text/html", page);
   });
@@ -142,10 +174,36 @@ void setup(void) {
 
     int newAz = readPosition("azimuth");
     int newEl = readPosition("elevation");
+    page.reserve(1500);
+    page = pageheader;
     if (error == "") {
-      page = pageheader + "<body style='text-align:center;'><h1>SATRAN Rotator</h1><p><form action='./manual' method='get'>Azimuth (1 - 360)<br/><input type='number' id='az' name='az' min='1' max='360' value=\"" + newAz + "\"><br/>Elevation (1 - 90)<br/><input type='number' id='el' name='el' min='1' max='90' value=\"" + newEl + "\"><br/><input type='submit' value='Execute'></form></p><p style='font-size:0.8em;color:#888;'>" + versioncode + "<br/>Current position: Azimuth " + newAz + " (memory " + posAz + ") / Elevation " + newEl + " (memory " + posEl + ") degrees<br/>Sensor values: Azimuth " + readAz + " / Elevation " + readEl + "</p>" + formvalues + "</body></html>";
+      page += F("<body style='text-align:center;'><h1>SATRAN Rotator</h1><p><form action='./manual' method='get'>Azimuth (1 - 360)<br/><input type='number' id='az' name='az' min='1' max='360' value=\"");
+      page += newAz;
+      page += F("\"><br/>Elevation (1 - 90)<br/><input type='number' id='el' name='el' min='1' max='90' value=\"");
+      page += newEl;
+      page += F("\"><br/><input type='submit' value='Execute'></form></p><p style='font-size:0.8em;color:#888;'>");
+      page += versioncode;
+      page += F("<br/>Current position: Azimuth ");
+      page += newAz;
+      page += F(" (memory ");
+      page += posAz;
+      page += F(") / Elevation ");
+      page += newEl;
+      page += F(" (memory ");
+      page += posEl;
+      page += F(") degrees<br/>Sensor values: Azimuth ");
+      page += readAz;
+      page += F(" / Elevation ");
+      page += readEl;
+      page += F("</p>");
+      page += formvalues;
+      page += F("</body></html>");
     } else {
-      page = pageheader + "<body style='text-align:center;'><h1>SATRAN Rotator</h1><p><strong>" + error + "</strong></p><p style='font-size:0.8em;color:#888;'>" + versioncode + "</p></body></html>";
+      page += F("<body style='text-align:center;'><h1>SATRAN Rotator</h1><p><strong>");
+      page += error;
+      page += F("</strong></p><p style='font-size:0.8em;color:#888;'>");
+      page += versioncode;
+      page += F("</p></body></html>");
     }
     server.send(200, "text/html", page);
   });
@@ -200,10 +258,25 @@ void setup(void) {
   server.on("/calibration", []() {
     readAz = readSensor("azimuth");
     readEl = readSensor("elevation");
-    calibrationPage = pageheader + "<body style='text-align:center;'><script>function rotate(command){ fetch('./microstep?action='+command).then(data => { console.log(data); location.reload(); }); }</script>";
-    calibrationPage = calibrationPage + error + "<h1>SATRAN Calibration</h1>";
-    calibrationPage = calibrationPage + "<button type='button' onclick='rotate(\"ccw\");' class='btn'>Azimuth CCW</button> <input type='text' value='" + readAz + "' readonly style='width:70px;'> <button type='button' onclick='rotate(\"cw\");' class='btn'>Azimuth CW</button><br><button type='button' onclick='rotate(\"down\");' class='btn'>Elevation Down</button> <input type='text' value='" + readEl + "' readonly style='width:70px;'> <button type='button' onclick='rotate(\"up\");' class='btn'>Elevation Up</button><br><br>";
-    calibrationPage = calibrationPage + "<FORM action='/storecalibration' method='get'>Azimuth min (0 degrees north): <input type='text' id='minAz' name='minAz' value='" + minAzValue + "' style='width:80px;'><br>Azimuth max (360 degrees north): <input type='text' id='maxAz' name='maxAz' value='" + maxAzValue + "' style='width:80px;'><br>Elevation min (0 degrees, horizontal): <input type='text' id='minEl' name='minEl' value='" + minElValue + "' style='width:80px;'><br>Elevation max (90 degrees, vertical): <input type='text' id='maxEl' name='maxEl' value='" + maxElValue + "' style='width:80px;'><br><input type='submit' id='submit' value='Save calibration'></FORM></body></html>";
+    calibrationPage.reserve(1500);
+    calibrationPage = pageheader;
+    calibrationPage += F("<body style='text-align:center;'><script>function rotate(command){ fetch('./microstep?action='+command).then(data => { console.log(data); location.reload(); }); }</script>");
+    calibrationPage += error;
+    calibrationPage += F("<h1>SATRAN Calibration</h1>");
+    calibrationPage += F("<button type='button' onclick='rotate(\"ccw\");' class='btn'>Azimuth CCW</button> <input type='text' value='");
+    calibrationPage += readAz;
+    calibrationPage += F("' readonly style='width:70px;'> <button type='button' onclick='rotate(\"cw\");' class='btn'>Azimuth CW</button><br><button type='button' onclick='rotate(\"down\");' class='btn'>Elevation Down</button> <input type='text' value='");
+    calibrationPage += readEl;
+    calibrationPage += F("' readonly style='width:70px;'> <button type='button' onclick='rotate(\"up\");' class='btn'>Elevation Up</button><br><br>");
+    calibrationPage += F("<FORM action='/storecalibration' method='get'>Azimuth min (0 degrees north): <input type='text' id='minAz' name='minAz' value='");
+    calibrationPage += minAzValue;
+    calibrationPage += F("' style='width:80px;'><br>Azimuth max (360 degrees north): <input type='text' id='maxAz' name='maxAz' value='");
+    calibrationPage += maxAzValue;
+    calibrationPage += F("' style='width:80px;'><br>Elevation min (0 degrees, horizontal): <input type='text' id='minEl' name='minEl' value='");
+    calibrationPage += minElValue;
+    calibrationPage += F("' style='width:80px;'><br>Elevation max (90 degrees, vertical): <input type='text' id='maxEl' name='maxEl' value='");
+    calibrationPage += maxElValue;
+    calibrationPage += F("' style='width:80px;'><br><input type='submit' id='submit' value='Save calibration'></FORM></body></html>");
     error = ""; /* Reset any messages already sent to browser */
     server.send(200, "text/html", calibrationPage);
   });
@@ -218,32 +291,27 @@ void setup(void) {
         digitalWrite(Pin_Az1, HIGH);
         delay(20);
         haltMotors();
-        delay(200);
-        int readAz = readSensor("azimuth"); /* Read the new values */
+        delay(50);                      // Reduced from 200ms
+        readAz = readSensor("azimuth"); /* Read the new values */
       } else if (command == "ccw") {
         digitalWrite(Pin_Az2, HIGH);
         delay(20);
         haltMotors();
-        delay(200);
-        int readAz = readSensor("azimuth"); /* Read the new values */
+        delay(50);                      // Reduced from 200ms
+        readAz = readSensor("azimuth"); /* Read the new values */
       } else if (command == "down") {
         digitalWrite(Pin_El1, HIGH);
         delay(20);
         haltMotors();
-        delay(200);
-        int readEl = readSensor("elevation");
+        delay(50);  // Reduced from 200ms
+        readEl = readSensor("elevation");
       } else if (command == "up") {
         digitalWrite(Pin_El2, HIGH);
         delay(20);
         haltMotors();
-        delay(200);
-        int readEl = readSensor("elevation");
+        delay(50);  // Reduced from 200ms
+        readEl = readSensor("elevation");
       }
-
-      calibrationPage = pageheader + "<body style='text-align:center;'><script>function rotate(command){ fetch('./manual?action='+command).then(data => { console.log(data); location.reload(); }); }</script>";
-      calibrationPage = calibrationPage + error + "<h1>SATRAN Calibration</h1>";
-      calibrationPage = calibrationPage + "<button type='button' onclick='rotate(\"ccw\");' class='btn'>Azimuth CCW</button> <input type='text' value='" + readAz + "' readonly style='width:70px;'> <button type='button' onclick='rotate(\"cw\");' class='btn'>Azimuth CW</button><br><button type='button' onclick='rotate(\"down\");' class='btn'>Elevation Down</button> <input type='text' value='" + readEl + "' readonly style='width:70px;'> <button type='button' onclick='rotate(\"up\");' class='btn'>Elevation Up</button><br><br>";
-      calibrationPage = calibrationPage + "<FORM action='/storecalibration' method='get'>Azimuth min (0 degrees north): <input type='text' id='minAz' name='minAz' value='" + minAzValue + "' style='width:80px;'><br>Azimuth max (360 degrees north): <input type='text' id='maxAz' name='maxAz' value='" + maxAzValue + "' style='width:80px;'><br>Elevation min (0 degrees, horizontal): <input type='text' id='minEl' name='minEl' value='" + minElValue + "' style='width:80px;'><br>Elevation max (90 degrees, vertical): <input type='text' id='maxEl' name='maxEl' value='" + maxElValue + "' style='width:80px;'><br><input type='submit' id='submit' value='Save calibration'></FORM></body></html>";
 
       server.send(200, "text/html", "success");
     } else {
@@ -476,30 +544,55 @@ void initializeRotator(void) { /* Test connection and function of motors and sen
     int startAz = posAz;
     int startEl = posEl;
 
-    // Rotate motors
+    Serial.print("Init: Starting position Az=");
+    Serial.print(startAz);
+    Serial.print(" El=");
+    Serial.println(startEl);
+
+    // Rotate motors - ensure we move at least 10 degrees
     int targetAz;
     int targetEl;
     if (startAz < 180) {
-      targetAz = startAz + 20;
+      targetAz = min(startAz + 20, 360);
     } else {
-      targetAz = startAz - 20;
+      targetAz = max(startAz - 20, 0);
     }
     if (startEl < 45) {
-      targetEl = 50;
+      targetEl = min(50, 90);
     } else {
-      targetEl = 30;
+      targetEl = max(30, 0);
     }
+
+    Serial.print("Init: Target position Az=");
+    Serial.print(targetAz);
+    Serial.print(" El=");
+    Serial.println(targetEl);
+
     turnMotors(targetAz, targetEl);
+
+    delay(100);  // Brief delay to ensure motors have stopped and sensors stabilize
+
     int newAz = readPosition("azimuth");
     int readAzChange = abs(startAz - newAz);
     int newEl = readPosition("elevation");
     int readElChange = abs(startEl - newEl);
 
+    Serial.print("Init: New position Az=");
+    Serial.print(newAz);
+    Serial.print(" El=");
+    Serial.print(newEl);
+    Serial.print(" Changes: Az=");
+    Serial.print(readAzChange);
+    Serial.print(" El=");
+    Serial.println(readElChange);
+
     // Return true only if the sensors registered motion
     if (readAzChange < 5) {
-      error = "Azimuth sensor did not register motion when initializing (Measured change: " + (String)readAzChange + ")";
+      error = "Azimuth sensor did not register motion when initializing (Measured change: " + (String)readAzChange + " Start: " + (String)startAz + " End: " + (String)newAz + ")";
+      Serial.println(error);
     } else if (readElChange < 5) {
-      error = "Elevation sensor did not register motion when initializing (Measured change: " + (String)readElChange + ")";
+      error = "Elevation sensor did not register motion when initializing (Measured change: " + (String)readElChange + " Start: " + (String)startEl + " End: " + (String)newEl + ")";
+      Serial.println(error);
     } else {
       // If no errors and rotator has been previously calibrated; move to north
       if (minAzValue != 200 || maxAzValue != 700 || minElValue != 350 || maxElValue != 650) {
@@ -549,7 +642,7 @@ int readSensor(String value) { /* Read actual values "azimuth" or "elevation" fr
     digitalWrite(Pin_SensAz, HIGH);
     delay(5); /* time to normalize voltage before reading */
     reading = analogRead(0);
-    for (int x = 0; x < 12; x++) {
+    for (int x = 0; x < 12; x++) { /* Original averaging restored for noise immunity */
       delay(5);
       reading = (reading * 0.6) + (analogRead(0) * 0.4); /* running average reduces sensor fluctuation */
     }
@@ -559,7 +652,7 @@ int readSensor(String value) { /* Read actual values "azimuth" or "elevation" fr
     digitalWrite(Pin_SensEl, HIGH);
     delay(5); /* time to normalize voltage before reading */
     reading = analogRead(0);
-    for (int x = 0; x < 12; x++) {
+    for (int x = 0; x < 12; x++) { /* Original averaging restored for noise immunity */
       delay(5);
       reading = (reading * 0.6) + (analogRead(0) * 0.4); /* running average reduces sensor fluctuation */
     }
@@ -576,10 +669,24 @@ int readPosition(String value) { /* Get position ("azimuth" or "elevation") in d
     readAz = readSensor("azimuth");
     readPos = (readAz - minAzValue) * 360 / (maxAzValue - minAzValue);
     reading = round(readPos);
+    // Clamp to valid range
+    if (reading < 0) reading = 0;
+    if (reading > 360) reading = 360;
+    Serial.print("Az: sensor=");
+    Serial.print(readAz);
+    Serial.print(" min=");
+    Serial.print(minAzValue);
+    Serial.print(" max=");
+    Serial.print(maxAzValue);
+    Serial.print(" pos=");
+    Serial.println(reading);
   } else if (value == "elevation") {
     readEl = readSensor("elevation");
     readPos = (readEl - minElValue) * 90 / (maxElValue - minElValue);
     reading = round(readPos);
+    // Clamp to valid range
+    if (reading < 0) reading = 0;
+    if (reading > 90) reading = 90;
   }
   return reading;
 }
@@ -596,8 +703,32 @@ void turnMotors(int azTarget, int elTarget) { /* Move motor towards target in de
 
   // Enable motors
   analogWrite(Pin_PWM, 250);
+  delay(10);  // Give PWM time to stabilize
 
-  if (abs(newAz - posAz) < 40 && abs(newEl - posEl) < 20 && readAz > 10 && readEl > 10) {  // Dont move if measured sensors differs too much from last known position or lost connection
+  // Check if sensors are connected
+  bool sensorsValid = (readAz > 10 && readEl > 10);
+
+  // Check if current reading is reasonable compared to stored position
+  bool azReasonable = (abs(newAz - posAz) < 40);
+  bool elReasonable = (abs(newEl - posEl) < 20);
+
+  // If sensors are valid but position differs, the stored position may be stale - update it
+  if (sensorsValid && (!azReasonable || !elReasonable)) {
+    Serial.print("Position mismatch - updating stored position: oldAz=");
+    Serial.print(posAz);
+    Serial.print(" newAz=");
+    Serial.print(newAz);
+    Serial.print(" oldEl=");
+    Serial.print(posEl);
+    Serial.print(" newEl=");
+    Serial.println(newEl);
+    posAz = newAz;  // Trust the current sensor reading
+    posEl = newEl;
+    azReasonable = true;
+    elReasonable = true;
+  }
+
+  if (azReasonable && elReasonable && sensorsValid) {
 
     // Set actual current position to the one measured and not the last known
     azPos = newAz;
@@ -622,29 +753,82 @@ void turnMotors(int azTarget, int elTarget) { /* Move motor towards target in de
       digitalWrite(Pin_El2, HIGH);
       motionEl = true;
     }
+  } else {
+    // Log why motors didn't move for debugging
+    Serial.print("Motor safety check failed: newAz=");
+    Serial.print(newAz);
+    Serial.print(" posAz=");
+    Serial.print(posAz);
+    Serial.print(" diff=");
+    Serial.print(abs(newAz - posAz));
+    Serial.print(" newEl=");
+    Serial.print(newEl);
+    Serial.print(" posEl=");
+    Serial.print(posEl);
+    Serial.print(" diff=");
+    Serial.print(abs(newEl - posEl));
+    Serial.print(" readAz=");
+    Serial.print(readAz);
+    Serial.print(" readEl=");
+    Serial.println(readEl);
   }
 
   int n = 0;
+  int startingAz = azPos;  // Remember initial direction
+  int startingEl = elPos;
+  int azNearCount = 0;  // Count consecutive "near target" readings
+  int elNearCount = 0;
+
+  // Give motors time to start moving before we check position
+  if (motionAz || motionEl) {
+    delay(50);
+  }
+
   while (motionAz == true || motionEl == true) {
+    yield();  // Prevent watchdog timer reset during long motor operations
+
     if (motionAz == true) {
       newAz = readPosition("azimuth");
       if (abs(newAz - posAz) > 40) {  // If measured position differs more than 40 degrees from last read, stop! EMI or sensor error
         errorAz++;
+        Serial.print("Az EMI/error detected: newAz=");
+        Serial.print(newAz);
+        Serial.print(" posAz=");
+        Serial.println(posAz);
         if (errorAz > 50) { error = "Azimuth sensor, read " + String(newAz) + " memory " + String(posAz); }
         digitalWrite(Pin_Az1, LOW);
         digitalWrite(Pin_Az2, LOW);
         motionAz = false;
       } else {
         errorAz = 0;
-        if (azPos < azTarget && newAz > (azTarget - 5)) {
-          digitalWrite(Pin_Az1, LOW);
-          digitalWrite(Pin_Az2, LOW);
-          motionAz = false;
+        // Use starting position to determine which direction we're going
+        // Require 2 consecutive readings near target to stop (reduces false stops from noise)
+        bool nearTarget = false;
+        if (startingAz < azTarget) {
+          // Moving CW - check if we're within 3 degrees of target
+          if (newAz >= (azTarget - 3)) {
+            nearTarget = true;
+          }
+        } else if (startingAz > azTarget) {
+          // Moving CCW - check if we're within 3 degrees of target
+          if (newAz <= (azTarget + 3)) {
+            nearTarget = true;
+          }
         }
-        if (azPos > azTarget && newAz < (azTarget + 5)) {
-          digitalWrite(Pin_Az1, LOW);
-          digitalWrite(Pin_Az2, LOW);
-          motionAz = false;
+
+        if (nearTarget) {
+          azNearCount++;
+          if (azNearCount >= 2) {
+            Serial.print("Az reached target: newAz=");
+            Serial.print(newAz);
+            Serial.print(" target=");
+            Serial.println(azTarget);
+            digitalWrite(Pin_Az1, LOW);
+            digitalWrite(Pin_Az2, LOW);
+            motionAz = false;
+          }
+        } else {
+          azNearCount = 0;  // Reset if we're not near target
         }
         posAz = newAz;
       }
@@ -654,21 +838,40 @@ void turnMotors(int azTarget, int elTarget) { /* Move motor towards target in de
       newEl = readPosition("elevation");
       if (abs(newEl - posEl) > 15) {  // If measured position differs more than 10 degrees from last read, stop! EMI or sensor error
         errorEl++;
+        Serial.print("El EMI/error detected: newEl=");
+        Serial.print(newEl);
+        Serial.print(" posEl=");
+        Serial.println(posEl);
         if (errorEl > 60) { error = "Elevation sensor, read " + String(newEl) + " memory " + String(posEl); }
         digitalWrite(Pin_El1, LOW);
         digitalWrite(Pin_El2, LOW);
         motionEl = false;
       } else {
         errorEl = 0;
-        if (elPos > elTarget && newEl < (elTarget + 3)) {
-          digitalWrite(Pin_El1, LOW);
-          digitalWrite(Pin_El2, LOW);
-          motionEl = false;
+        // Use starting position to determine which direction we're going
+        // Require 2 consecutive readings near target to stop (reduces false stops from noise)
+        bool nearTarget = false;
+        if (startingEl > elTarget) {
+          // Moving down - check if we're within 2 degrees of target
+          if (newEl <= (elTarget + 2)) {
+            nearTarget = true;
+          }
+        } else if (startingEl < elTarget) {
+          // Moving up - check if we're within 2 degrees of target
+          if (newEl >= (elTarget - 2)) {
+            nearTarget = true;
+          }
         }
-        if (elPos < elTarget && newEl > (elTarget - 3)) {
-          digitalWrite(Pin_El1, LOW);
-          digitalWrite(Pin_El2, LOW);
-          motionEl = false;
+
+        if (nearTarget) {
+          elNearCount++;
+          if (elNearCount >= 2) {
+            digitalWrite(Pin_El1, LOW);
+            digitalWrite(Pin_El2, LOW);
+            motionEl = false;
+          }
+        } else {
+          elNearCount = 0;  // Reset if we're not near target
         }
         posEl = newEl;
       }
@@ -702,55 +905,71 @@ void loop(void) {
   server.handleClient();
   readResetButton();
 
-  /* Hamlib/rotctl TCP socket */
-  client1 = server2.available();
-  while (client1 && client1.connected()) {
-    rotctl = client1.readStringUntil('\n');
-    Serial.println(rotctl);
-    if (char(rotctl[0]) == 'p' || rotctl.indexOf("get_pos") > 0) {
-      int azPos = readPosition("azimuth");
-      int elPos = readPosition("elevation");
-      if (azPos > -1 && azPos < 361 && elPos > -1 && elPos < 91) {
-        client1.print(String(azPos) + ".0\n" + String(elPos) + ".0\n");
-      } else {
-        client1.print("RPRT -6\n");
-      }
+  /* Hamlib/rotctl TCP socket - Non-blocking implementation */
+  // Accept new client if we don't have one
+  if (!client1 || !client1.connected()) {
+    client1 = server2.available();
+    if (client1) {
+      lastClientActivity = millis();
     }
-    if (char(rotctl[0]) == 'P' || rotctl.indexOf("set_pos") > 0) {
-      int divider;
-      if (char(rotctl[0]) == 'P') {
-        divider = 2;
-      } else {
-        divider = 8;
-      }
-      String part1 = rotctl.substring(divider, rotctl.indexOf(" ", divider));
-      String part2 = rotctl.substring(rotctl.indexOf(" ", divider), rotctl.length());
-      int newAz = part1.toInt();
-      int newEl = part2.toInt();
-      if (newAz > -1 && newAz < 361 && newEl > -1 && newEl < 91) {
-        turnMotors(newAz, newEl);
-        client1.print("RPRT 0\n");
-      } else {
-        client1.print("RPRT -6\n");
-      }
-    }
-    if (char(rotctl[0]) == 'M' || rotctl.indexOf("move") > 0) { client1.print("RPRT -4\n"); /* command not supported by satran */ }
-    if (char(rotctl[0]) == 'C' || rotctl.indexOf("set_conf") > 0) { client1.print("RPRT -4\n"); /* command not supported by satran */ }
-    if (char(rotctl[0]) == 'S' || rotctl.indexOf("stop") > 0) { /* Stop */
-      haltMotors();
-      client1.print("RPRT 0\n");
-    }
-    if (char(rotctl[0]) == 'K' || rotctl.indexOf("park") > 0) { /* Park */
-      initializeRotator();
-      client1.print("RPRT 0\n");
-    }
-    if (char(rotctl[0]) == '_' || rotctl.indexOf("get_info") > 0) { client1.print("Info SATRAN v.2.1.1 az/el rotator\n"); }
-    if (char(rotctl[0]) == 'R' || rotctl.indexOf("reset") > 0) {
-      client1.stop();
-      ESP.restart();
-    }
-    rotctl = "";
-    delay(200);
   }
-  client1.stop();
+
+  // Process existing client
+  if (client1 && client1.connected()) {
+    // Check for timeout
+    if (millis() - lastClientActivity > CLIENT_TIMEOUT) {
+      client1.stop();
+      return;
+    }
+
+    // Only process if data is available
+    if (client1.available()) {
+      rotctl = client1.readStringUntil('\n');
+      lastClientActivity = millis();
+      Serial.println(rotctl);
+
+      if (rotctl.length() > 0) {
+        char firstChar = char(rotctl[0]);
+
+        if (firstChar == 'p' || rotctl.indexOf("get_pos") > 0) {
+          int azPos = readPosition("azimuth");
+          int elPos = readPosition("elevation");
+          if (azPos > -1 && azPos < 361 && elPos > -1 && elPos < 91) {
+            client1.print(String(azPos) + ".0\n" + String(elPos) + ".0\n");
+          } else {
+            client1.print("RPRT -6\n");
+          }
+        } else if (firstChar == 'P' || rotctl.indexOf("set_pos") > 0) {
+          int divider = (firstChar == 'P') ? 2 : 8;
+          String part1 = rotctl.substring(divider, rotctl.indexOf(" ", divider));
+          String part2 = rotctl.substring(rotctl.indexOf(" ", divider), rotctl.length());
+          int newAz = part1.toInt();
+          int newEl = part2.toInt();
+          if (newAz > -1 && newAz < 361 && newEl > -1 && newEl < 91) {
+            turnMotors(newAz, newEl);
+            client1.print("RPRT 0\n");
+          } else {
+            client1.print("RPRT -6\n");
+          }
+        } else if (firstChar == 'M' || rotctl.indexOf("move") > 0) {
+          client1.print("RPRT -4\n"); /* command not supported by satran */
+        } else if (firstChar == 'C' || rotctl.indexOf("set_conf") > 0) {
+          client1.print("RPRT -4\n"); /* command not supported by satran */
+        } else if (firstChar == 'S' || rotctl.indexOf("stop") > 0) {
+          haltMotors();
+          client1.print("RPRT 0\n");
+        } else if (firstChar == 'K' || rotctl.indexOf("park") > 0) {
+          initializeRotator();
+          client1.print("RPRT 0\n");
+        } else if (firstChar == '_' || rotctl.indexOf("get_info") > 0) {
+          client1.print("Info SATRAN v.2.1.1 az/el rotator\n");
+        } else if (firstChar == 'R' || rotctl.indexOf("reset") > 0) {
+          client1.stop();
+          ESP.restart();
+        }
+        rotctl = "";
+      }
+    }
+    // Return to main loop immediately - no delay or blocking
+  }
 }
